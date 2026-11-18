@@ -174,29 +174,34 @@ func TestReplaceChannelsRemovesStale(t *testing.T) {
 		{UserChannelID: "1", ChannelURL: "igmp://1.1.1.1:5140"},
 		{UserChannelID: "2", ChannelURL: "igmp://2.2.2.2:5140"},
 		{UserChannelID: "3", ChannelURL: "igmp://3.3.3.3:5140"},
+		{UserChannelID: "4", ChannelURL: "igmp://4.4.4.4:5140"},
+		{UserChannelID: "5", ChannelURL: "igmp://5.5.5.5:5140"},
 	})
-	if got := s.ChannelCount(); got != 3 {
-		t.Fatalf("初始应有 3 条频道详情，实际 %d", got)
+	if got := s.ChannelCount(); got != 5 {
+		t.Fatalf("初始应有 5 条频道详情，实际 %d", got)
 	}
 
-	// 频道 3 下线（新快照里没有）
+	// 频道 5 下线（新快照里没有）。4/5=80% 不低于 70% 阈值，不触发缩水保护。
 	added, removed, synced := s.ReplaceChannels([]model.Channel{
 		{UserChannelID: "1", ChannelURL: "igmp://1.1.1.1:5140"},
 		{UserChannelID: "2", ChannelURL: "igmp://2.2.2.2:5140"},
+		{UserChannelID: "3", ChannelURL: "igmp://3.3.3.3:5140"},
+		{UserChannelID: "4", ChannelURL: "igmp://4.4.4.4:5140"},
 	})
 	if !synced || removed != 1 || added != 0 {
 		t.Fatalf("期望同步并移除 1 条，实际 synced=%v added=%d removed=%d", synced, added, removed)
 	}
-	if got := s.ChannelCount(); got != 2 {
-		t.Fatalf("剔除后应剩 2 条，实际 %d", got)
+	if got := s.ChannelCount(); got != 4 {
+		t.Fatalf("剔除后应剩 4 条，实际 %d", got)
 	}
-	if _, ok := s.GetChannelByUserChannelID("3"); ok {
-		t.Fatal("已下线的频道 3 不应再存在")
+	if _, ok := s.GetChannelByUserChannelID("5"); ok {
+		t.Fatal("已下线的频道 5 不应再存在")
 	}
 
 	// 新增频道
 	added, removed, _ = s.ReplaceChannels([]model.Channel{
-		{UserChannelID: "1"}, {UserChannelID: "2"}, {UserChannelID: "4"},
+		{UserChannelID: "1"}, {UserChannelID: "2"}, {UserChannelID: "3"},
+		{UserChannelID: "4"}, {UserChannelID: "6"},
 	})
 	if added != 1 || removed != 0 {
 		t.Fatalf("期望新增 1 条且不删除，实际 added=%d removed=%d", added, removed)
