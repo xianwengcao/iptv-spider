@@ -2,7 +2,7 @@
 set -e
 
 # 项目名称
-PROJECT_NAME="sh-tel-iptv-spider"
+PROJECT_NAME="iptv-spider"
 
 # 打印版本信息（可选）
 echo "Building $PROJECT_NAME, version: $VERSION"
