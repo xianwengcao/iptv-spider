@@ -1,4 +1,4 @@
-name: Release EasyCmd
+name: Release iptv-spider
 on:
   push:
     tags:
