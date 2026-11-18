@@ -39,7 +39,6 @@ func NetBind() netbind.Group {
 
 	if def.Enabled() {
 		bindLogInfo("出站网卡绑定已启用：" + def.Describe())
-		bindLogInfo(fmt.Sprintf("  └─ IPTV/HTTP : %s", g.Default.Describe()))
 	} else if strings.TrimSpace(sys.Dev) != "" {
 		bindLogInfo("system.dev 解析失败，出站网卡绑定未启用")
 	} else {
