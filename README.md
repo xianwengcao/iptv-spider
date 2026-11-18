@@ -1,6 +1,6 @@
 # iptv-spider
 
-📺 **上海电信 IPTV 频道信息抓取服务**
+**上海电信 IPTV 频道信息抓取服务**
 
 从上海电信 IPTV 认证接口抓取**频道列表**和**EPG 节目单**，在内存中维护一份实时数据，通过 HTTP 接口对内网提供 **M3U 播放列表**和 **EPG 节目单**，供 xteve、PotPlayer、TiviMate、Kodi 等播放器 / EPG 工具直接订阅。
 
