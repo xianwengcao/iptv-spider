@@ -58,7 +58,7 @@ func getM3u8Mapping(commName string) (model.M3u8Mapping, bool) {
 // GenerateM3u8 生成 m3u 播放列表。
 // 返回 error 而不是 nil 字节：调用方必须能区分"生成失败"和"空列表"，
 // 否则 API 会给下游返回 200 + 空文件（播放器会以为频道全没了）。
-func GenerateM3u8(udpxy, xteve string) ([]byte, error) {
+func GenerateM3u8() ([]byte, error) {
 	// 配置空值检查
 	if global.CONFIG == nil || global.CONFIG.Epg.XmlUrl == "" {
 		global.LOG.Error("配置文件未正确加载")
@@ -269,7 +269,7 @@ func GenerateM3u8(udpxy, xteve string) ([]byte, error) {
 			}
 		}
 
-		uri := assemblyUrl(udpxy, xteve, channel.ChannelURL, channel.ChannelFCCIP, channel.ChannelFCCPort)
+		uri := assemblyUrl(channel.ChannelURL, channel.ChannelFCCIP, channel.ChannelFCCPort)
 		if uri == "" {
 			// 播放地址生成失败时跳过该频道：写入一行空 URL 会让频道出现在
 			// 列表里但无法播放，比不出现更难排查。
@@ -290,8 +290,8 @@ func GenerateM3u8(udpxy, xteve string) ([]byte, error) {
 	return m3uWriter.Bytes(), nil
 }
 
-// assemblyUrl 按播放模式拼装播放地址：xteve 优先，其次 udpxy，否则走 rtp_url（含 FCC）。
-func assemblyUrl(udpxy, xteve, uri, fccIp, fccPort string) string {
+// assemblyUrl 拼装播放地址：默认 HTTP-RTP 模式（rtp_url 前缀，含 FCC）。
+func assemblyUrl(uri, fccIp, fccPort string) string {
 	// 配置空值检查
 	if global.CONFIG == nil || global.CONFIG.Epg.RtpUrl == "" {
 		global.LOG.Error("配置文件未正确加载，无法生成URL")
@@ -306,15 +306,6 @@ func assemblyUrl(udpxy, xteve, uri, fccIp, fccPort string) string {
 	if err != nil {
 		global.LOG.Error(fmt.Sprintf("URL解析失败 (URI: %s): %s", uri, err.Error()))
 		return ""
-	}
-	// xteve模式
-	if xteve == "true" {
-		return fmt.Sprintf("udp://@%s", u.Host)
-	}
-
-	// udpxy模式
-	if udpxy != "" {
-		return fmt.Sprintf("http://%s/udp/%s", udpxy, u.Host)
 	}
 
 	// HTTP RTP + FCC 使用动态加载的 rtp_url

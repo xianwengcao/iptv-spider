@@ -35,8 +35,6 @@ const cacheTTL = 240 * time.Minute
 // cacheTTL 仅作为旧缓存条目的兜底回收周期（正常情况下旧版本
 // 会在新版本生成时被立即删除，见 prevKeys）。
 //
-// ref=true 仍然可以强制跳过缓存重新生成。
-//
 // 生成失败时返回 error，由调用方转成 5xx：之前错误被 singleflight 吞掉，
 // 调用方拿到 nil 字节但仍然返回 200 + 空 body + Content-Type: xml，
 // 播放器/xteve 会认为节目单就是空的，可能把已有的节目表直接刷掉。
@@ -49,10 +47,8 @@ func cachedGenerate(ctx iris.Context, name string, params []string, gen func() (
 	reqMD5Key := utils.CalcMD5KeyForRequest(append(append([]string{name}, params...), version)...)
 
 	// 缓存机制
-	if ctx.FormValue("ref") != "true" && global.CACHE.IsExist(reqMD5Key) {
-		if buf, ok := global.CACHE.Get(reqMD5Key).([]byte); ok && len(buf) > 0 {
-			return buf, nil
-		}
+	if buf, ok := global.CACHE.Get(reqMD5Key).([]byte); ok && len(buf) > 0 {
+		return buf, nil
 	}
 	// 并发时合并请求
 	resp, err, _ := global.ConcurrencyControl.Do(reqMD5Key, func() (interface{}, error) {
@@ -169,15 +165,8 @@ func schedule(ctx iris.Context) {
 
 // 生成m3u8文件 节目去重
 func generateM3u8(ctx iris.Context) {
-	// 获取query参数
-	udpxy := ctx.FormValue("udpxy")
-	xteve := ctx.FormValue("xteve")
-
-	// 缓存 key 用带字段名的参数元组，避免 ?udpxy=xteve 与 ?xteve=true 撞车。
-	keyParts := []string{"udpxy=" + udpxy, "xteve=" + xteve}
-
-	buf, err := cachedGenerate(ctx, "generateM3u8", keyParts, func() ([]byte, error) {
-		return auth.GenerateM3u8(udpxy, xteve)
+	buf, err := cachedGenerate(ctx, "generateM3u8", nil, func() ([]byte, error) {
+		return auth.GenerateM3u8()
 	})
 	if err != nil {
 		global.LOG.Error("生成 m3u 失败: " + err.Error())
