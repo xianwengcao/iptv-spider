@@ -31,7 +31,6 @@ import (
 const (
 	dialTimeout = 30 * time.Second
 	keepAlive   = 30 * time.Second
-	dnsTimeout  = 10 * time.Second
 )
 
 // offWords 表示“该服务不做网卡绑定”。
@@ -49,8 +48,6 @@ func IsOff(v string) bool {
 type Options struct {
 	// Dev 网卡名或本机 IPv4 地址；留空 = 不绑定。
 	Dev string
-	// BindDNS 是否连 DNS 解析也走该网卡。
-	BindDNS bool
 	// Logger 可为 nil。
 	Logger *zap.Logger
 }
@@ -62,7 +59,6 @@ type Binder struct {
 	ifName  string // 网卡名
 	ifIndex int    // 网卡索引
 	localIP net.IP // 绑定用的源地址（网卡上的 IPv4）
-	bindDNS bool
 	log     *zap.Logger
 
 	enabled bool
@@ -70,13 +66,12 @@ type Binder struct {
 	devWarnOnce sync.Once // SO_BINDTODEVICE 失败只告警一次
 	transOnce   sync.Once
 	transport   *http.Transport
-	resolver    *net.Resolver
 }
 
 // New 依据 Options 解析并创建 Binder。
 // dev 为空或 off 时返回一个未启用的 Binder 且不报错。
 func New(o Options) (*Binder, error) {
-	b := &Binder{log: o.Logger, bindDNS: o.BindDNS}
+	b := &Binder{log: o.Logger}
 	dev := strings.TrimSpace(o.Dev)
 	if dev == "" || IsOff(dev) {
 		return b, nil
@@ -86,9 +81,6 @@ func New(o Options) (*Binder, error) {
 	}
 	b.dev = dev
 	b.enabled = true
-	if b.bindDNS {
-		b.resolver = b.newBoundResolver()
-	}
 	return b, nil
 }
 
@@ -119,9 +111,6 @@ func (b *Binder) Describe() string {
 		parts = append(parts, "源地址="+b.localIP.String())
 	} else {
 		parts = append(parts, "源地址=未取到IPv4（仅能依赖网卡绑定）")
-	}
-	if b.bindDNS {
-		parts = append(parts, "DNS=同网卡")
 	}
 	return strings.Join(parts, ", ")
 }
@@ -219,14 +208,15 @@ func (b *Binder) DialContext(ctx context.Context, network, address string) (net.
 	if !b.Enabled() {
 		return (&net.Dialer{Timeout: dialTimeout, KeepAlive: keepAlive}).DialContext(ctx, network, address)
 	}
-	// b.resolver 只在 system.dev-dns=true 时非空，用于让 DNS 解析也走该网卡
-	return b.dialerFor(network, b.resolver).DialContext(ctx, network, address)
+	// DNS 解析走系统默认配置，不绑定网卡（专网网卡通常没有 DNS）
+
+	return b.dialerFor(network).DialContext(ctx, network, address)
 }
 
 // dialerFor 构造一个绑定到目标网卡的 net.Dialer。
 // network 用来决定 LocalAddr 的类型（*net.TCPAddr / *net.UDPAddr）。
-func (b *Binder) dialerFor(network string, resolver *net.Resolver) *net.Dialer {
-	d := &net.Dialer{Timeout: dialTimeout, KeepAlive: keepAlive, Resolver: resolver}
+func (b *Binder) dialerFor(network string) *net.Dialer {
+	d := &net.Dialer{Timeout: dialTimeout, KeepAlive: keepAlive}
 	if local := b.localAddr(network); local != nil {
 		d.LocalAddr = local
 	}
@@ -247,24 +237,6 @@ func (b *Binder) localAddr(network string) net.Addr {
 		return &net.UDPAddr{IP: b.localIP}
 	}
 	return nil
-}
-
-// newBoundResolver 让 DNS 解析也走指定网卡（由 system.dev-dns 控制，默认关闭）。
-func (b *Binder) newBoundResolver() *net.Resolver {
-	return &net.Resolver{
-		PreferGo:     true,
-		StrictErrors: false,
-		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-			d := &net.Dialer{Timeout: dnsTimeout}
-			if local := b.localAddr(network); local != nil {
-				d.LocalAddr = local
-			}
-			if b.ifName != "" {
-				d.Control = b.control
-			}
-			return d.DialContext(ctx, network, address)
-		},
-	}
 }
 
 // ---------------------------------------------------------------------------

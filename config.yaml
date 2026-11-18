@@ -1,21 +1,15 @@
 # system configuration
 system:
   addr: '0.0.0.0:8888' # 监听地址
-
+  dev: 'br-iptv'
   # ===== 出站网卡绑定 =====
   # 让程序的所有对外通信（IPTV 认证 / EPG / 频道列表）
-  # 都从下面指定的网络接口发出。适合主机有多张网卡（例如上网口 + IPTV 专网口）的场景。
+  # 都从指定的网络接口发出。适合主机有多张网卡（例如上网口 + IPTV 专网口）的场景。
   #   dev 取值：
-  #     - 网卡名，Linux/OpenWrt 推荐，如 eth0 / pppoe-wan / br-lan / eth0.85
+  #     - 网卡名，Linux/OpenWrt 推荐，如 eth0 / pppoe-wan / br-iptv / eth0.85
   #       （Linux 下会额外设置 SO_BINDTODEVICE 强制走该网卡，需要 root 权限）
   #     - 该网卡上的本机 IPv4 地址，如 192.168.10.2（Windows 推荐这种写法）
-  #     - 留空 = 不绑定，走系统路由表（默认行为，与旧版本一致）
-  #   dev-dns：
-  #     是否把 DNS 解析也绑定到该网卡。IPTV 专网网卡通常没有 DNS，
-  #     保持 false 更安全；确认该网卡可用 DNS 时再打开。
-  # 提示：修改 dev 后需要重启程序才生效，且不会影响 addr 的监听行为。
-  dev: 'br-iptv'
-  dev-dns: false
+  #     - 留空 = 不绑定，走系统路由表（默认行为）
 
 stb:
   uid: 'xxxxxxxxx@etv1'     # IPTV 用户名
@@ -36,13 +30,22 @@ epg:
   source: 'Shanghai Telecom Iptv Spider'
   xml_url: 'http://192.168.50.200/epg.xml'
   logo_url: 'http://192.168.50.200/logo/'
-  fetch_cron: '0 0 0,6,12,18 * * *'
   rtp_url: 'http://192.168.50.254:5140/rtp/'
   rtsp_url: 'http://192.168.50.254:5140/rtsp/'
+  fetch_cron: '0 0 0,6,12,18 * * *'
   
   #时移参数
   playseek: "&playseek={utc:YmdHMS}-{utcend:YmdHMS}"
-  
+ 
+ #日志配置
+zap:
+  level: 'info'
+  prefix: '[iptv-spider]'
+  director: 'log'
+  encode-level: 'LowercaseLevelEncoder'
+  log-in-console: false
+
+
   #自定义获取频道，针对节目单列表没有的频道，通过igmp或频道ID匹配直播和回放地址
   channel_mappings:
     - id: '721'                             #tvg-id
@@ -275,14 +278,5 @@ epg:
     - name: "嘉佳卡通"
     - name: "家庭理财"
 
-
-
-# zap logger configuration
-zap:
-  level: 'info'
-  prefix: '[iptv-spider-sh]'
-  director: 'log'
-  encode-level: 'LowercaseLevelEncoder'
-  log-in-console: false
 
 

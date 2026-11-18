@@ -16,12 +16,10 @@ import (
 // 留空表示不绑定（保持原有走系统路由表的行为）。
 func NetBind() netbind.Group {
 	sys := global.CONFIG.System
-	bindDNS := sys.DevDNS
 
 	def, err := netbind.New(netbind.Options{
-		Dev:     sys.Dev,
-		BindDNS: bindDNS,
-		Logger:  global.LOG,
+		Dev:    sys.Dev,
+		Logger: global.LOG,
 	})
 	if err != nil {
 		bindLogError("出站网卡绑定初始化失败，本次不启用：" + err.Error())
