@@ -1,0 +1,27 @@
+name: CI
+
+# 每次推送到 main 自动验证：go vet + go test + 编译检查
+# （本机无 Go 工具链时，用这个流程代替本地编译验证）
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./store/ ./model/ ./utils/ ./modules/... ./config/
+
+      - name: Build check
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o /dev/null main.go
