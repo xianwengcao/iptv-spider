@@ -51,8 +51,7 @@ type Client struct {
 	//
 	// 认证与拉取共用同一个 HttpClient 的 cookies（JSESSIONID），并发执行会
 	// 互相覆盖。整轮任务（run）持有此锁完成"认证 → 频道列表 → 节目单"，
-	// 手动触发的入口（StartAuth / RunChannelList / RunProg）也在同一把锁
-	// 上排队，因此不会有两个流程同时改写会话。
+	// 不会有两个流程同时改写会话。
 	// 已持锁的内部路径使用 *Locked 变体，避免重入死锁。
 	opMu sync.Mutex
 
@@ -74,24 +73,6 @@ type Client struct {
 // 认证失败即跳过本轮：此时没有任何可用会话，继续拉取必然全部失败。
 // 旧数据原样保留，由清理任务的前置校验（allowClean）保证不被误删。
 func (c *Client) RunRound() { c.run(true, true) }
-
-// RunChannelList 只跑"认证 + 频道信息列表"（供 /api/run?task=update-chi 使用）。
-func (c *Client) RunChannelList() { c.run(true, false) }
-
-// RunProg 只跑"认证 + 节目单"（供 /api/run?task=update-epg 使用）。
-func (c *Client) RunProg() { c.run(false, true) }
-
-// StartAuth 单独执行一次认证并同步频道播放详情（供 /api/run?task=auth 使用）。
-func (c *Client) StartAuth() error {
-	c.opMu.Lock()
-	defer c.opMu.Unlock()
-	channels, err := c.startAuthLocked()
-	if err != nil {
-		return err
-	}
-	c.syncChannels(channels)
-	return nil
-}
 
 // run 持锁执行一轮动作，整轮的写入合并为一次版本号递增。
 func (c *Client) run(withList, withProg bool) {

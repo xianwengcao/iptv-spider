@@ -84,36 +84,21 @@ func cachedGenerate(ctx iris.Context, name string, params []string, gen func() (
 func InitApiRouters(rg iris.Party) {
 	rg.Get("/schedule", schedule)
 	rg.Get("/run", func(ctx iris.Context) {
-		taskName := ctx.FormValue("task")
-
-		// 校验任务名：未知任务直接返回 400，而不是假装 OK
-		if !validTask(taskName) {
+		// 不带参数等同 update-all；显式传 task=update-all 也可以。
+		// 其余任务名已移除，传了直接返回 400，而不是假装 OK
+		taskName := ctx.FormValueDefault("task", "update-all")
+		if taskName != "update-all" {
 			ctx.StatusCode(iris.StatusBadRequest)
 			ctx.WriteString("unknown task: " + taskName)
 			return
 		}
 
 		go func() {
-			// singleflight key 用 taskName：相同任务并发触发时合并为一次执行；
-			// 不同任务互不影响（之前固定用空 key，慢任务运行期间其他任务会被静默吞掉）
+			// singleflight 合并并发触发：上一轮还在跑时，重复触发不会叠加执行
 			global.ConcurrencyControl.Do(taskName, func() (interface{}, error) {
 				c := auth.GetGlobalClient()
-				switch taskName {
-				case "update-all":
-					// 认证 + 频道列表 + 节目单，与 cron 的一轮完全一致
-					c.RunRound()
-				case "update-chi":
-					// 只刷新频道信息列表（内部先认证：会话在轮间必已过期）
-					c.RunChannelList()
-				case "update-epg":
-					// 只刷新节目单（内部先认证）
-					c.RunProg()
-				case "auth":
-					// 只重新认证，顺带同步频道播放详情
-					if err := c.StartAuth(); err != nil {
-						global.LOG.Error("手动认证失败: " + err.Error())
-					}
-				}
+				// 认证 + 频道列表 + 节目单，与 cron 的一轮完全一致
+				c.RunRound()
 				return nil, nil
 			})
 		}()
@@ -135,15 +120,6 @@ func InitApiRouters(rg iris.Party) {
 
 	rg.Get("/epg", generateXmlTv)
 
-}
-
-// validTask 校验 /api/run 的 task 参数是否为已支持的任务名。
-func validTask(task string) bool {
-	switch task {
-	case "update-all", "update-chi", "update-epg", "auth":
-		return true
-	}
-	return false
 }
 
 func schedule(ctx iris.Context) {
