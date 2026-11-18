@@ -15,15 +15,22 @@ stb:
   uid: 'xxxxxxxxx@etv1'     # IPTV 用户名
   mac: 'xx:xx:xx:xx:xx:xx' # 机顶盒Mac地址
   sn: '000xxxxxxxxxxxxxxx' # 机顶盒SN码
-  ip: '30.xx.xx.xx' # 专网IP地址
+  ip: '30.30.30.30' # 专网IP地址
   type: 'B860A'
   auth_host: '222.68.208.73:7001'
-
 
 #相关api
 #例子，daysAgo<=7
 #http://192.168.50.254:8888/api/m3u8
 #http://192.168.50.254:8888/api/epg?daysAgo=3
+
+ #日志配置
+zap:
+  level: 'info'
+  prefix: '[iptv-spider]'
+  director: 'log'
+  encode-level: 'LowercaseLevelEncoder'
+  log-in-console: false
 
 epg:
   generator: 'Deny'
@@ -37,15 +44,6 @@ epg:
   #时移参数
   playseek: "&playseek={utc:YmdHMS}-{utcend:YmdHMS}"
  
- #日志配置
-zap:
-  level: 'info'
-  prefix: '[iptv-spider]'
-  director: 'log'
-  encode-level: 'LowercaseLevelEncoder'
-  log-in-console: false
-
-
   #自定义获取频道，针对节目单列表没有的频道，通过igmp或频道ID匹配直播和回放地址
   channel_mappings:
     - id: '721'                             #tvg-id
