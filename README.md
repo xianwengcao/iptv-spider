@@ -59,9 +59,9 @@ system:
 
 # ===== 机顶盒认证信息 =====
 stb:
-  uid: 'xxxxxxxxx@etv1'    # IPTV 账号（认证关键参数）
-  mac: 'xx:xx:xx:xx:xx:xx' # 机顶盒 MAC（符合格式即可）
-  sn: '000xxxxxxxxxxxxxxx' # 机顶盒 SN（符合格式即可）
+  uid: 'xxxxxxxxx@etv1'    # IPTV 账号
+  mac: 'xx:xx:xx:xx:xx:xx' # 机顶盒 MAC
+  sn: '000xxxxxxxxxxxxxxx' # 机顶盒 SN
   ip: '30.xx.xx.xx'        # 专网 IP
   auth_host: '222.68.208.73:7001'
 
