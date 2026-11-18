@@ -1,4 +1,4 @@
-# iptv-spider-sh
+# iptv-spider
 
 📺 **上海电信 IPTV 抓取服务**
 
