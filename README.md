@@ -1,6 +1,6 @@
-# iptv-spider-sh
+# iptv-spider
 
- **上海电信 IPTV 抓取服务**
+**上海电信 IPTV 频道信息抓取服务**
 
 从上海电信 IPTV 认证接口抓取**频道列表**和**EPG 节目单**，在内存中维护一份实时数据，通过 HTTP 接口对内网提供 **M3U 播放列表**和 **EPG 节目单**，供 xteve、PotPlayer、TiviMate、Kodi 等播放器 / EPG 工具直接订阅。
 
@@ -10,7 +10,7 @@
 ##  特性
 
 - **零外部依赖**：数据全部存内存无需数据库，软件 + config.yaml 即可运行
-- **版本号缓存**：所有 API 响应的缓存 key 拼接数据版本号，数据一更新旧缓存立即作废，下游任何时刻拉取都是最新结果
+- **版本号缓存**：所有 API 响应的缓存 key 拼接数据版本号，数据一更新旧缓存立即作废
 - **FCC/回放**：直播地址、FCC 加速节点、回放地址随运营商数据自动对齐
 - **自定义频道**：`channel_mappings` 可添加节目单里没有的频道
 - **频道排序/过滤**：`name_sequence` 自定义播放列表顺序，`exclude_channels` 过滤不需要的频道
@@ -59,9 +59,9 @@ system:
 
 # ===== 机顶盒认证信息 =====
 stb:
-  uid: 'xxxxxxxxx@etv1'    # IPTV 账号（认证关键参数）
-  mac: 'xx:xx:xx:xx:xx:xx' # 机顶盒 MAC（符合格式即可）
-  sn: '000xxxxxxxxxxxxxxx' # 机顶盒 SN（符合格式即可）
+  uid: 'xxxxxxxxx@etv1'    # IPTV 账号
+  mac: 'xx:xx:xx:xx:xx:xx' # 机顶盒 MAC
+  sn: '000xxxxxxxxxxxxxxx' # 机顶盒 SN
   ip: '30.xx.xx.xx'        # 专网 IP
   auth_host: '222.68.208.73:7001'
 
@@ -81,7 +81,7 @@ epg:
 ./iptv-spider
 ```
 
-启动后自动执行第一轮抓取（认证 → 频道列表 → 节目单），随后按 `fetch_cron` 定时刷新；每天一次兜底清理过期数据。日志写入 `log/` 目录。
+启动后自动执行第一轮抓取，随后按 `fetch_cron` 定时抓取并刷新内存；每天一次兜底清理过期数据。日志写入 `log/` 目录。
 
 ---
 
@@ -90,8 +90,8 @@ epg:
 | 接口 | 说明 |
 | --- | --- |
 | `GET /api/m3u8` | 生成 M3U 播放列表（HTTP-RTP 地址，有 FCC 的频道自动追加加速参数） |
-| `GET /api/epg?daysAgo=3` | 生成 XMLTV 节目单。**不带参数时默认 3 天** |
-| `GET /api/run` | 手动触发一轮完整抓取（认证 → 频道列表 → 节目单）。可直接调用，无需参数；`?task=update-all` 为显式写法，其他任务名返回 400 |
+| `GET /api/epg?daysAgo=3` | 生成 XMLTV 节目单，`daysAgo` 控制回溯天数（≤7） |
+| `GET /api/run` | 手动触发一轮数据抓取 |
 | `GET /api/healthz` | 健康检查，返回数据版本号与频道/节目单规模 |
 | `GET /api/schedule` | 查看定时任务的上次/下次执行时间 |
 
@@ -106,7 +106,7 @@ http://192.168.50.254:8888/api/epg?daysAgo=3
 
 ##  频道自定义（channel_mappings）
 
-针对节目单里没有、或需要特殊处理的频道：
+针对拉取的数据里有播放地址但没有频道名称或其他相关信息、或需要特殊处理的频道：
 
 ```yaml
 epg:
@@ -125,19 +125,18 @@ epg:
 | 字段 | 语义 |
 | --- | --- |
 | `igmp` | 直播地址。默认用它去运营商频道数据里查询匹配，FCC / 回放地址随匹配到的记录 |
-| `id_lookup: true` | 改为按 `id` 匹配运营商频道：**整条记录按 id 借用**（回放 catchup-source、FCC 全部一致），仅直播地址用配置的 `igmp`。 |
+| `id_lookup: true` | 此频道按 `id` 匹配频道信息：**整条记录按 id 借用**仅直播地址用配置的 `igmp` |
 | `display_name` | 覆盖逗号后播放器显示的频道名。设置后与原频道**并存为两条**，不覆盖原频道 |
-| `name_sequence` | 频道排序表。按"逗号后的显示名"匹配排序，未上榜的频道排在最后 |
+| `name_sequence` | 频道排序表。按"group-title"后面的"显示名"匹配排序，未上榜的频道排在最后 |
 
 其他配置：
 
 - `exclude_channels`：过滤表，表内频道不输出到m3u中
-- `group_rules`：自定义分组规则，频道名包含 match 中任一关键词即归入该分组（大小写不敏感，自上而下第一条命中生效），未命中归入"其他"；整段留空时使用内置默认规则；修改后无需重启，下一轮拉取自动生效。分组优先级：`channel_mappings.group` > `group_rules` > "其他"
 - `logo_url` / `xml_url`：EPG 输出里的 logo 与节目单引用前缀
 - `logo/` 目录：内置常用频道 logo（运行时可选资源，不部署则输出空 logo）
 
 ---
 
-##  许可
+## 📄 许可
 
 仅供学习研究，禁止商用。使用本项目产生的一切后果由使用者自行承担。
