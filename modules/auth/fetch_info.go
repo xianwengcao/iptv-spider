@@ -104,8 +104,9 @@ func (c *Client) fetchChannelListLocked() {
 	for _, info := range respJson.Data {
 		global.LOG.Debug("FetchChannelList Data:", zap.Any("Channel Info", info))
 	}
-	// 数据写入内存存储（按 MixNo 覆盖写入）
-	store.Default.UpsertChannelInfos(respJson.Data)
+	// 数据写入内存存储（按 MixNo 覆盖写入）；分组规则随每轮写入刷新，
+	// config 里改了 group_rules 无需重启，下一轮拉取自动生效
+	store.Default.UpsertChannelInfos(respJson.Data, global.CONFIG.Epg.GroupRules)
 	markFetchOK(dataChannelInfo)
 	global.LOG.Info("频道信息列表更新完成")
 	global.LOG.Info(fmt.Sprintf("内存频道信息: %d 条, 频道详情: %d 条",

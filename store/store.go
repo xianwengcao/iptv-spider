@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"iptv-spider-sh/config"
 	"iptv-spider-sh/model"
 )
 
@@ -200,7 +201,8 @@ func (s *Store) ChannelCount() int {
 // UpsertChannelInfos 批量写入频道信息，按 MixNo 去重更新（同一 MixNo 以本次
 // 接口返回为准整体覆盖），同时维护 M3u8Mapping 的自动分组
 // （对应原 BeforeCreate/BeforeUpdate 钩子）。
-func (s *Store) UpsertChannelInfos(list []model.ChannelInfo) {
+// rules 为分组规则（来自 epg.group_rules），为空时使用内置默认规则。
+func (s *Store) UpsertChannelInfos(list []model.ChannelInfo, rules []config.GroupRule) {
 	if len(list) == 0 {
 		return
 	}
@@ -210,11 +212,10 @@ func (s *Store) UpsertChannelInfos(list []model.ChannelInfo) {
 	for i := range list {
 		ch := list[i]
 		ch.ProcessData()
-		groups := ch.AutoGroupsFor()
-		if groups != "" {
+		if ch.CommName != "" {
 			m := s.mappings[ch.CommName]
 			m.CommName = ch.CommName
-			m.AutoGroups = groups
+			m.AutoGroups = ch.AutoGroupsFor(rules)
 			s.mappings[ch.CommName] = m
 		}
 		ch.UpdatedAt = now

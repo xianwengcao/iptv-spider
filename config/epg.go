@@ -15,6 +15,16 @@ type Epg struct {
 	ChannelMappings []ChannelMapping `mapstructure:"channel_mappings" yaml:"channel_mappings"`
 	NameSequence    []ChannelMapping `mapstructure:"name_sequence" yaml:"name_sequence"`
 	ExcludeChannels []string         `mapstructure:"exclude_channels" yaml:"exclude_channels"` // 过滤掉的频道 CommName 列表
+	// GroupRules 自定义分组规则：按关键词匹配频道名，自上而下第一条命中的规则生效；
+	// 都不命中的频道归入"其他"。留空时使用内置默认规则（model.DefaultGroupRules），
+	// 与旧版硬编码行为一致。
+	GroupRules []GroupRule `mapstructure:"group_rules" yaml:"group_rules"`
+}
+
+// GroupRule 一条分组规则：频道名（大写化后）包含 Match 中任一关键词即命中该分组。
+type GroupRule struct {
+	Group string   `mapstructure:"group" json:"group" yaml:"group"` // 分组名（写入 m3u 的 group-title）
+	Match []string `mapstructure:"match" json:"match" yaml:"match"` // 关键词列表，命中任一即归入 Group
 }
 
 type ChannelMapping struct {

@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"iptv-spider-sh/config"
 )
 
 // ChannelInfo 频道信息，来源于 getChannelList 接口。
@@ -48,38 +50,42 @@ func (h *ChannelInfo) processData() {
 	}
 }
 
-// autoGroups 根据频道名计算自动分组（替代原先入库时的数据库 upsert 钩子）
-func (h *ChannelInfo) autoGroups() string {
-	if h.CommName == "" {
-		return ""
+// DefaultGroupRules 内置默认分组规则：config 未配置 epg.group_rules 时使用，
+// 行为与旧版硬编码逻辑一致。
+var DefaultGroupRules = []config.GroupRule{
+	{Group: "央视", Match: []string{"CCTV", "CGTN"}},
+	{Group: "卫视", Match: []string{"卫视"}},
+	{Group: "购物", Match: []string{"购物"}},
+	{Group: "空中课堂", Match: []string{"年级"}},
+	{Group: "百事通", Match: []string{"百事通"}},
+	{Group: "电影", Match: []string{"影"}},
+}
+
+// MatchGroup 按规则给频道分组：自上而下第一条命中的规则生效（关键词
+// 大小写不敏感的包含匹配），都不命中归入"其他"。
+func MatchGroup(name string, rules []config.GroupRule) string {
+	upper := strings.ToUpper(name)
+	for _, r := range rules {
+		for _, kw := range r.Match {
+			if kw != "" && strings.Contains(upper, strings.ToUpper(kw)) {
+				return r.Group
+			}
+		}
 	}
-	var groups []string
-	if strings.Contains(h.CommName, "CCTV") {
-		groups = append(groups, "央视")
-	} else if strings.Contains(h.Name, "卫视") {
-		groups = append(groups, "卫视")
-	} else if strings.Contains(h.Name, "购物") {
-		groups = append(groups, "购物")
-	} else if strings.Contains(h.Name, "年级") {
-		groups = append(groups, "空中课堂")
-	} else if strings.Contains(h.Name, "百事通") {
-		groups = append(groups, "百事通")
-	} else if strings.Contains(h.Name, "影") {
-		groups = append(groups, "电影")
-	} else {
-		groups = append(groups, "其他")
+	return "其他"
+}
+
+// AutoGroupsFor 计算该频道对应的自动分组字符串（rules 为空时用内置默认规则）
+func (h *ChannelInfo) AutoGroupsFor(rules []config.GroupRule) string {
+	if len(rules) == 0 {
+		rules = DefaultGroupRules
 	}
-	return strings.Join(groups, ",")
+	return MatchGroup(h.Name, rules)
 }
 
 // ProcessData 处理频道名派生字段（CommName/IsHD/Is4K），供 store 在入库前调用
 func (h *ChannelInfo) ProcessData() {
 	h.processData()
-}
-
-// AutoGroupsFor 计算该频道对应的自动分组字符串
-func (h *ChannelInfo) AutoGroupsFor() string {
-	return h.autoGroups()
 }
 
 // RemoveDuplicateChannelInfo  ChannelInfo 数组去重

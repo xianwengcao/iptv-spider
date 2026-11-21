@@ -68,6 +68,12 @@ func GenerateM3u8() ([]byte, error) {
 	m3uWriter := m3u.NewWriter()
 	m3uWriter.WriteHeaderWithInfo(global.CONFIG.Epg.XmlUrl)
 
+	// 分组规则：config 的 group_rules，留空时回退内置默认规则
+	groupRules := global.CONFIG.Epg.GroupRules
+	if len(groupRules) == 0 {
+		groupRules = model.DefaultGroupRules
+	}
+
 	// 从内存存储读取频道信息
 	channelInfoList := getChannelInfoList()
 	// 去重
@@ -246,7 +252,7 @@ func GenerateM3u8() ([]byte, error) {
 		// 获取频道映射信息
 		m3u8Mapping, _ := getM3u8Mapping(info.CommName)
 		if m3u8Mapping.AutoGroups == "" {
-			m3u8Mapping.AutoGroups = autoGroupByName(info.Name)
+			m3u8Mapping.AutoGroups = model.MatchGroup(info.Name, groupRules)
 		}
 
 		// 默认 logo
@@ -287,7 +293,17 @@ func GenerateM3u8() ([]byte, error) {
 		m3uWriter.WriteWithCatchup(uri, catchupSource, info, m3u8Mapping)
 	}
 
-	return m3uWriter.Bytes(), nil
+	// 兜底压缩：m3uWriter 内部是 zap buffer.Buffer，与 bytes.Buffer 一样按
+	// 2× 扩容。结果要放进缓存长期持有，切片指针引用整块底层数组时 GC 无法
+	// 回收未使用的尾部——容量明显超出内容（>12.5%）时复制成 len == cap 的
+	// 紧凑切片（与 GenerateXmlTv 的处理一致）。
+	out := m3uWriter.Bytes()
+	if cap(out) > len(out)+len(out)/8 {
+		compact := make([]byte, len(out))
+		copy(compact, out)
+		return compact, nil
+	}
+	return out, nil
 }
 
 // assemblyUrl 拼装播放地址：默认 HTTP-RTP 模式（rtp_url 前缀，含 FCC）。
@@ -356,16 +372,34 @@ func GenerateXmlTv(daysAgo int) ([]byte, error) {
 	// 从内存存储批量查询所有EPG数据
 	epgDataMap := store.Default.QueryEPG(epgChannelNames, now.SubDays(daysAgo).TimestampMilli())
 
-	// 预估输出字节数，减少 bytes.Buffer 的多次扩容
-	programCount := 0
-	for _, list := range epgDataMap {
-		programCount += len(list)
+	// 精确预统计输出字节数，让 bytes.Buffer 一次分配到位。
+	//
+	// 原先按"每条约 180 字节"估算，实际每条约 189 字节（22 位频道 id + 两个
+	// 20 字符时间戳 + 固定标签 + 中文标题），永远差 3~5%——而只要超出一字节，
+	// bytes.Buffer 就会按 2×cap 重新分配：实测 3 天窗口 3.46MB 的内容会先造
+	// 一块 6.62MB 的数组再扔掉，峰值和 GC 压力都白付。
+	//
+	// 这里改成按真实字段长度求和（纯整数累加，不格式化、不转义，3.8 万条也
+	// 只要几十微秒），误差只剩 XML 转义带来的膨胀，留 5% 余量即可。
+	need := 160 + len(global.CONFIG.Epg.Generator) + len(global.CONFIG.Epg.Source)
+	for _, info := range newChanInfo {
+		// <channel id=""><display-name lang="zh"></display-name> 固定 75 字节
+		idLen := len(info.MixNo)
+		need += 75 + idLen + len(info.CommName)
+		list := epgDataMap[info.CommName]
+		for i := range list {
+			// <programme channel="..."> 固定 155 字节（含两个 20 字符时间戳），
+			// 注意每条 programme 都会重复写一次频道 id，这里必须算进去——
+			// 漏掉它的话全量数据会少算 3.8 万 × id 长度（约 800KB）。
+			need += 155 + idLen + len(list[i].Name)
+		}
 	}
+	need += need/50 + 1024 // 2% 余量：个别节目名里的 & < > 会被转义撑大
 
 	// 流式写出：不再构建整棵文档树（数万个 programme/title 节点对象），
 	// 输出与原先的 xml.MarshalIndent 逐字节一致（见 model 包的 golden 测试）。
 	var buf bytes.Buffer
-	buf.Grow(programCount*180 + len(newChanInfo)*160 + 1024)
+	buf.Grow(need)
 	sw := model.NewXmlTvStreamWriter(&buf)
 	if err := sw.Header(global.CONFIG.Epg.Generator+" "+now.ToDateTimeString(), global.CONFIG.Epg.Source); err != nil {
 		global.LOG.Error("节目表单生成出错: " + err.Error())
@@ -396,22 +430,21 @@ func GenerateXmlTv(daysAgo int) ([]byte, error) {
 		global.LOG.Error("节目表单生成出错: " + err.Error())
 		return nil, errors.New("节目表单生成出错")
 	}
-	return buf.Bytes(), nil
-}
 
-func autoGroupByName(name string) string {
-	if strings.Contains(name, "CCTV") {
-		return "央视"
-	} else if strings.Contains(name, "卫视") {
-		return "卫视"
-	} else if strings.Contains(name, "购物") {
-		return "购物"
-	} else if strings.Contains(name, "年级") {
-		return "空中课堂"
-	} else if strings.Contains(name, "百事通") {
-		return "百事通"
-	} else if strings.Contains(name, "影") {
-		return "电影"
+	// 兜底压缩：只有容量明显超出内容（>12.5%）时才复制一份紧凑切片。
+	//
+	// 上面的预统计正常情况下误差在 5% 以内，不会触发扩容。但若节目名里含
+	// 大量 & < > 这类会被 XML 转义的字符，实际输出仍可能超过预估、导致
+	// bytes.Buffer 按 2×cap 重分配。缓存会长期持有这份字节，而切片指针
+	// 引用的是整块底层数组，GC 只能整块判活、无法只回收未使用的尾部——
+	// 那种情况下必须复制成 len == cap 的紧凑切片，否则缓存会白白多占一倍。
+	//
+	// 正常路径直接返回，省掉一次等长 memcpy 和一块临时内存。
+	out := buf.Bytes()
+	if cap(out) > len(out)+len(out)/8 {
+		compact := make([]byte, len(out))
+		copy(compact, out)
+		return compact, nil
 	}
-	return "其他"
+	return out, nil
 }

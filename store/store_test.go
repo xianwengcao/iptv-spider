@@ -18,7 +18,7 @@ func TestVersionBumpsOnWrite(t *testing.T) {
 	}
 
 	v1 := s.Version()
-	s.UpsertChannelInfos([]model.ChannelInfo{{MixNo: "10", Name: "CCTV-1HD"}})
+	s.UpsertChannelInfos([]model.ChannelInfo{{MixNo: "10", Name: "CCTV-1HD"}}, nil)
 	if s.Version() <= v1 {
 		t.Fatal("UpsertChannelInfos 应递增版本号")
 	}
@@ -27,8 +27,8 @@ func TestVersionBumpsOnWrite(t *testing.T) {
 // 同一个 MixNo 再次写入时整体覆盖（以接口返回为准），且不产生重复条目。
 func TestUpsertChannelInfoOverwrites(t *testing.T) {
 	s := New()
-	s.UpsertChannelInfos([]model.ChannelInfo{{MixNo: "10", Name: "CCTV-1HD", Code: "c1", ChID: "100"}})
-	s.UpsertChannelInfos([]model.ChannelInfo{{MixNo: "10", Name: "CCTV-1HD", Code: "c2", ChID: "200"}})
+	s.UpsertChannelInfos([]model.ChannelInfo{{MixNo: "10", Name: "CCTV-1HD", Code: "c1", ChID: "100"}}, nil)
+	s.UpsertChannelInfos([]model.ChannelInfo{{MixNo: "10", Name: "CCTV-1HD", Code: "c2", ChID: "200"}}, nil)
 
 	got := s.ListChannelInfos()
 	if len(got) != 1 {
@@ -95,7 +95,7 @@ func TestConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := 0; i < 50; i++ {
 		wg.Add(3)
-		go func() { defer wg.Done(); s.UpsertChannelInfos([]model.ChannelInfo{{MixNo: "1", Name: "X"}}) }()
+		go func() { defer wg.Done(); s.UpsertChannelInfos([]model.ChannelInfo{{MixNo: "1", Name: "X"}}, nil) }()
 		go func() { defer wg.Done(); s.ListChannelInfos() }()
 		go func() { defer wg.Done(); s.Version() }()
 	}
@@ -113,7 +113,7 @@ func TestBeginBatchBumpsOnce(t *testing.T) {
 		s.ReplaceEPG("CCTV-1", []model.EPGDetails{
 			{ID: "p1", Name: "新闻", StartTime: base, EndTime: base + 1000},
 		})
-		s.UpsertChannelInfos([]model.ChannelInfo{{MixNo: "10", Name: "CCTV-1HD"}})
+		s.UpsertChannelInfos([]model.ChannelInfo{{MixNo: "10", Name: "CCTV-1HD"}}, nil)
 	}
 	if got := s.Version(); got != v0 {
 		t.Fatalf("批量区间内版本号不应变化，期望 %d，实际 %d", v0, got)
@@ -160,7 +160,7 @@ func TestEmptyListDoesNotBumpVersion(t *testing.T) {
 	v0 := s.Version()
 
 	s.ReplaceChannels(nil)
-	s.UpsertChannelInfos([]model.ChannelInfo{})
+	s.UpsertChannelInfos([]model.ChannelInfo{}, nil)
 
 	if got := s.Version(); got != v0 {
 		t.Fatalf("无实际写入时版本号不应变化，期望 %d，实际 %d", v0, got)
